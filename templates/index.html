@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LogStrike SOC — Live Incident Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+  margin:0;
+  font-family: Segoe UI, Arial;
+  background: linear-gradient(120deg,#020617,#0f172a,#1e1b4b,#111827);
+  background-size: 300% 300%;
+  animation: fogShift 28s ease-in-out infinite;
+  color:#e5e7eb;
+}
+
+@keyframes fogShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.header {
+  padding:20px;
+  font-size:28px;
+  font-weight:700;
+  letter-spacing:1px;
+  background: linear-gradient(135deg,#0f172a,#1e293b,#ef4444,#dc2626);
+  color:white;
+  box-shadow:0 4px 20px rgba(0,0,0,.4);
+}
+
+.grid {
+  display:grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap:18px;
+  padding:18px;
+}
+
+.card {
+  background: linear-gradient(160deg,#020617,#020617 60%,#0b1220);
+  border-radius:16px;
+  padding:16px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.6);
+}
+
+.card h3 {
+  margin:0 0 10px 0;
+  font-size:16px;
+  color:#a78bfa;
+}
+
+.filters {
+  display:flex;
+  gap:8px;
+  margin-bottom:10px;
+  flex-wrap:wrap;
+}
+
+.searchBox {
+  padding:7px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.12);
+  background:#0b1220;
+  color:#e5e7eb;
+  font-size:12px;
+  min-width:180px;
+}
+
+.rangeSelect {
+  padding:7px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.12);
+  background:#0b1220;
+  color:#e5e7eb;
+  font-size:12px;
+}
+
+.exportBtn {
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:700;
+  border:1px solid rgba(255,255,255,.12);
+  background:#111827;
+  color:#e5e7eb;
+  cursor:pointer;
+}
+
+.toggleWrap {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+  opacity:.9;
+}
+
+.hl {
+  background:#fde047;
+  color:#0b1220;
+  padding:0 2px;
+  border-radius:4px;
+}
+
+.chip {
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:700;
+  border:1px solid rgba(255,255,255,.12);
+  background:#0b1220;
+  color:#e5e7eb;
+  cursor:pointer;
+}
+
+.chip.active {
+  outline:2px solid rgba(255,255,255,.2);
+}
+
+.chip-all { background:linear-gradient(135deg,#0b1220,#111827); }
+.chip-critical { background:linear-gradient(135deg,#ef4444,#7f1d1d); }
+.chip-high { background:linear-gradient(135deg,#f97316,#7c2d12); }
+.chip-medium { background:linear-gradient(135deg,#eab308,#7c5b0c); color:#0b1220; }
+.chip-low { background:linear-gradient(135deg,#22c55e,#14532d); }
+
+.scrollLock {
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+  opacity:.9;
+}
+
+#alertsBox {
+  height:420px;
+  overflow:auto;
+}
+
+.alertRow {
+  padding:10px;
+  margin-bottom:8px;
+  border-radius:10px;
+  font-size:13px;
+  background:#020617;
+  border-left:6px solid gray;
+}
+
+.sev-critical { border-color:#ef4444; background:linear-gradient(90deg,#450a0a,#020617); }
+.sev-high { border-color:#f97316; background:linear-gradient(90deg,#431407,#020617); }
+.sev-medium { border-color:#eab308; background:linear-gradient(90deg,#422006,#020617); }
+.sev-low { border-color:#22c55e; background:linear-gradient(90deg,#052e16,#020617); }
+
+.badge {
+  padding:3px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:600;
+}
+
+.badge-critical { background:#ef4444; color:white; }
+.badge-high { background:#f97316; color:black; }
+.badge-medium { background:#fde047; color:black; }
+.badge-low { background:#4ade80; color:black; }
+
+.badge-ack { background:#38bdf8; color:#0b1220; }
+.badge-dismiss { background:#94a3b8; color:#0b1220; }
+
+.rowActions {
+  display:flex;
+  gap:6px;
+  margin-top:6px;
+}
+
+.rowBtn {
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+  border:1px solid rgba(255,255,255,.12);
+  background:#111827;
+  color:#e5e7eb;
+  cursor:pointer;
+}
+
+.statRow {
+  display:flex;
+  gap:12px;
+}
+
+.stat {
+  flex:1;
+  padding:14px;
+  border-radius:14px;
+  text-align:center;
+  font-weight:700;
+}
+
+.s1 { background:linear-gradient(135deg,#ef4444,#b91c1c); }
+.s2 { background:linear-gradient(135deg,#f97316,#c2410c); }
+.s3 { background:linear-gradient(135deg,#eab308,#a16207); }
+.s4 { background:linear-gradient(135deg,#22c55e,#15803d); }
+
+canvas {
+  background:#020617;
+  border-radius:12px;
+  padding:10px;
+}
+
+.detailsPane {
+  min-height:220px;
+  font-size:13px;
+  line-height:1.4;
+}
+
+.detailsPane h4 {
+  margin:0 0 8px 0;
+  font-size:14px;
+  color:#a78bfa;
+}
+
+.detailsGrid {
+  display:grid;
+  grid-template-columns: 120px 1fr;
+  gap:6px 10px;
+}
+
+.detailsKey {
+  opacity:.7;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.5px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="header">🛡 LogStrike SOC — Live Incident Dashboard</div>
+
+<div class="grid">
+
+<div class="card">
+<h3>Live Incidents</h3>
+<div class="filters">
+  <button class="chip chip-all active" data-sev="all">All</button>
+  <button class="chip chip-critical" data-sev="critical">Critical</button>
+  <button class="chip chip-high" data-sev="high">High</button>
+  <button class="chip chip-medium" data-sev="medium">Medium</button>
+  <button class="chip chip-low" data-sev="low">Low</button>
+  <select id="timeRange" class="rangeSelect">
+    <option value="all">All time</option>
+    <option value="15m">Last 15m</option>
+    <option value="1h">Last 1h</option>
+    <option value="24h">Last 24h</option>
+  </select>
+  <input id="searchInput" class="searchBox" type="search" placeholder="Search rule, host, user, MITRE ID">
+  <button id="exportCsv" class="exportBtn">Export CSV</button>
+  <button id="exportJson" class="exportBtn">Export JSON</button>
+  <label class="toggleWrap"><input id="onlyUnack" type="checkbox">Only unack</label>
+  <label class="scrollLock"><input id="lockScroll" type="checkbox" checked>Lock scroll</label>
+</div>
+<div id="alertsBox"></div>
+</div>
+
+<div class="card">
+<h3>Severity Overview</h3>
+<div class="statRow">
+<div class="stat s1" id="crit">0<br>Critical</div>
+<div class="stat s2" id="high">0<br>High</div>
+<div class="stat s3" id="med">0<br>Medium</div>
+<div class="stat s4" id="low">0<br>Low</div>
+</div>
+<canvas id="sevChart"></canvas>
+</div>
+
+<div class="card">
+<h3>MITRE Technique Distribution</h3>
+<canvas id="mitreChart"></canvas>
+</div>
+
+<div class="card detailsPane" id="detailsPane">
+  <h3>Details</h3>
+  <div id="detailsContent">Select a row to view full details.</div>
+</div>
+
+</div>
+
+<script>
+
+const sevColors = ['#ef4444', '#f97316', '#eab308', '#22c55e'];
+
+const sevChart = new Chart(document.getElementById('sevChart'), {
+  type:'doughnut',
+  data:{
+    labels:['Critical','High','Medium','Low'],
+    datasets:[{
+      data:[0,0,0,0],
+      backgroundColor: sevColors,
+      borderColor: '#0b1220',
+      borderWidth: 2
+    }]
+  },
+  options: {
+    onClick: (evt, elements) => {
+      if (!elements || !elements.length) return;
+      const idx = elements[0].index;
+      const sevMap = ['critical','high','medium','low'];
+      const selected = sevMap[idx];
+      if (selected) setSeverityFilter(selected);
+    }
+  }
+});
+
+const mitreChart = new Chart(document.getElementById('mitreChart'), {
+  type:'bar',
+  data:{
+    labels:[],
+    datasets:[{
+      data:[],
+      backgroundColor: '#06b6d4',
+      borderColor: '#0b1220',
+      borderWidth: 2
+    }]
+  },
+});
+
+function sevClass(s){ return 'sev-'+s }
+function badgeClass(s){ return 'badge-'+s }
+
+let severityFilter = 'all';
+let searchQuery = '';
+let timeRange = 'all';
+let onlyUnack = false;
+const maxDisplay = 100;
+let alertsCache = [];
+let eventsCache = [];
+
+const ACK_STORAGE_KEY = 'alertAckState';
+let ackState = loadAckState();
+
+function escapeHtml(value){
+  return String(value ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function escapeRegExp(value){
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+}
+
+function highlightText(value){
+  const safe = escapeHtml(value);
+  if (!searchQuery) return safe;
+  const re = new RegExp(escapeRegExp(searchQuery), 'gi');
+  return safe.replace(re, match => `<span class="hl">${match}</span>`);
+}
+
+function loadAckState(){
+  try {
+    const raw = localStorage.getItem(ACK_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function saveAckState(){
+  localStorage.setItem(ACK_STORAGE_KEY, JSON.stringify(ackState));
+}
+
+function getAlertKey(x){
+  return `${x.event_id || ''}|${x.time || ''}|${x.host || ''}|${x.rule || ''}`;
+}
+
+function setAckStatus(key, status){
+  if (!status) {
+    delete ackState[key];
+  } else {
+    ackState[key] = status;
+  }
+  saveAckState();
+  renderCurrentView();
+}
+
+function withRange(url){
+  return timeRange === 'all' ? url : `${url}?range=${encodeURIComponent(timeRange)}`;
+}
+
+function attachRowPayload(row, type, payload){
+  row.dataset.type = type;
+  row.dataset.payload = JSON.stringify(payload);
+}
+
+function renderDetails(payload, type){
+  const pane = document.getElementById('detailsContent');
+  if (!payload) {
+    pane.textContent = 'Select a row to view full details.';
+    return;
+  }
+
+  const rows = [];
+  const pushRow = (label, value) => {
+    rows.push(`<div class="detailsKey">${escapeHtml(label)}</div><div>${escapeHtml(value ?? '')}</div>`);
+  };
+
+  if (type === 'alert') {
+    pushRow('Type', 'Alert');
+    pushRow('Rule', payload.rule);
+    pushRow('Severity', payload.severity);
+    pushRow('Host', payload.host);
+    pushRow('User', payload.user);
+    pushRow('Time', payload.time);
+    pushRow('MITRE', payload.mitre);
+    pushRow('Event ID', payload.event_id);
+  } else {
+    pushRow('Type', 'Event');
+    pushRow('Event ID', payload.event_id);
+    pushRow('Source', payload.source);
+    pushRow('Log', payload.log);
+    pushRow('Event Type', payload.type);
+    pushRow('Host', payload.host);
+    pushRow('User', payload.user);
+    pushRow('Time', payload.time);
+    pushRow('Category', payload.category);
+    pushRow('Record', payload.record);
+    pushRow('Inserts', Array.isArray(payload.inserts) ? payload.inserts.join(' | ') : payload.inserts);
+  }
+
+  pane.innerHTML = `<h4>Selected ${escapeHtml(type)}</h4><div class="detailsGrid">${rows.join('')}</div>`;
+}
+
+function dedupeByKey(items, keyFn){
+  const seen = new Set();
+  const out = [];
+  items.forEach(x => {
+    const key = keyFn(x);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(x);
+  });
+  return out;
+}
+
+function setSeverityFilter(value){
+  severityFilter = value;
+  document.querySelectorAll('.chip').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.sev === value);
+  });
+  renderCurrentView();
+}
+
+document.querySelectorAll('.chip').forEach(btn=>{
+  btn.addEventListener('click', ()=>setSeverityFilter(btn.dataset.sev));
+});
+
+document.getElementById('searchInput').addEventListener('input', (e)=>{
+  searchQuery = e.target.value.trim();
+  renderCurrentView();
+});
+
+document.getElementById('timeRange').addEventListener('change', (e)=>{
+  timeRange = e.target.value;
+  refresh();
+});
+
+document.getElementById('onlyUnack').addEventListener('change', (e)=>{
+  onlyUnack = e.target.checked;
+  renderCurrentView();
+});
+
+document.getElementById('alertsBox').addEventListener('click', (e)=>{
+  const target = e.target.closest('button[data-action]');
+  if (!target) return;
+  const action = target.dataset.action;
+  const key = decodeURIComponent(target.dataset.key || '');
+  if (!key) return;
+
+  if (action === 'ack') setAckStatus(key, 'ack');
+  if (action === 'dismiss') setAckStatus(key, 'dismissed');
+  if (action === 'clear') setAckStatus(key, null);
+});
+
+document.getElementById('alertsBox').addEventListener('click', (e)=>{
+  if (e.target.closest('button')) return;
+  const row = e.target.closest('.alertRow');
+  if (!row || !row.dataset.payload) return;
+  try {
+    const payload = JSON.parse(row.dataset.payload);
+    renderDetails(payload, row.dataset.type || 'event');
+  } catch (err) {
+    renderDetails(null);
+  }
+});
+
+function renderAlertRow(box, x){
+  const d=document.createElement('div');
+  d.className='alertRow '+sevClass(x.severity||'low');
+  attachRowPayload(d, 'alert', x);
+  const key = getAlertKey(x);
+  const status = ackState[key];
+  const statusHtml = status === 'ack'
+    ? '<span class="badge badge-ack">ack</span>'
+    : (status === 'dismissed' ? '<span class="badge badge-dismiss">dismissed</span>' : '');
+  d.innerHTML=`<b>${highlightText(x.rule)}</b> — ${highlightText(x.host)}<br>
+    <span class="badge badge-events">Detected Alert</span>
+    <span class="badge ${badgeClass(x.severity||'low')}">${escapeHtml(x.severity||'low')}</span>
+    ${statusHtml}
+    ${highlightText(x.time)}<br>${highlightText(x.mitre)}`;
+
+  const actions = document.createElement('div');
+  actions.className = 'rowActions';
+
+  if (status !== 'ack') {
+    const ackBtn = document.createElement('button');
+    ackBtn.className = 'rowBtn';
+    ackBtn.dataset.action = 'ack';
+    ackBtn.dataset.key = encodeURIComponent(key);
+    ackBtn.textContent = 'Acknowledge';
+    actions.appendChild(ackBtn);
+  }
+
+  if (status !== 'dismissed') {
+    const disBtn = document.createElement('button');
+    disBtn.className = 'rowBtn';
+    disBtn.dataset.action = 'dismiss';
+    disBtn.dataset.key = encodeURIComponent(key);
+    disBtn.textContent = 'Dismiss';
+    actions.appendChild(disBtn);
+  }
+
+  if (status) {
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'rowBtn';
+    clearBtn.dataset.action = 'clear';
+    clearBtn.dataset.key = encodeURIComponent(key);
+    clearBtn.textContent = 'Clear';
+    actions.appendChild(clearBtn);
+  }
+
+  d.appendChild(actions);
+  box.appendChild(d);
+}
+
+function renderEventRow(box, x){
+  const d=document.createElement('div');
+  d.className='alertRow '+sevClass('low');
+  attachRowPayload(d, 'event', x);
+  const inserts = Array.isArray(x.inserts) && x.inserts.length
+    ? x.inserts.slice(0, 3).join(' | ')
+    : 'No details';
+  d.innerHTML=`<b>Event ${highlightText(x.event_id)}</b> — ${highlightText(x.source || 'Unknown')}<br>
+    <span class="badge ${badgeClass('low')}">Raw Event</span>
+    <span class="badge ${badgeClass('low')}">${escapeHtml(x.type || 'Info')}</span>
+    <span class="badge ${badgeClass('low')}">${escapeHtml(x.log || 'Log')}</span>
+    ${highlightText(x.time)}<br>
+    ${highlightText(x.host)} • Cat ${highlightText(x.category ?? 'N/A')} • Rec ${highlightText(x.record ?? 'N/A')}<br>
+    ${highlightText(inserts)}${x.user ? `<br>User ${highlightText(x.user)}` : ''}`;
+  box.appendChild(d);
+}
+
+function renderCurrentView(){
+  const box = document.getElementById('alertsBox');
+  box.innerHTML = '';
+
+  const hasAlerts = Array.isArray(alertsCache) && alertsCache.length;
+  const hasEvents = false;
+
+  if (!hasAlerts && !hasEvents) {
+    box.innerHTML = '<div class="alertRow">No alerts or events yet.</div>';
+    return;
+  }
+
+  const filteredAlerts = hasAlerts
+    ? (severityFilter === 'all'
+        ? alertsCache
+        : alertsCache.filter(x => (x.severity || 'low') === severityFilter))
+    : [];
+
+  const searchLower = searchQuery.toLowerCase();
+  const searchFilter = (x, fields) => {
+    if (!searchLower) return true;
+    return fields.some(v => String(v ?? '').toLowerCase().includes(searchLower));
+  };
+
+  const alertStateFilter = (x) => {
+    const status = ackState[getAlertKey(x)];
+    if (status === 'dismissed') return false;
+    if (onlyUnack && status === 'ack') return false;
+    return true;
+  };
+
+  const alertsSearched = filteredAlerts
+    .filter(x => searchFilter(x, [
+      x.rule, x.host, x.user, x.mitre, x.time, x.event_id
+    ]))
+    .filter(alertStateFilter);
+
+  const uniqueAlerts = dedupeByKey(
+    alertsSearched,
+    x => `${x.event_id || ''}|${x.time || ''}|${x.host || ''}|${x.rule || ''}`
+  );
+  uniqueAlerts.slice(-maxDisplay).reverse().forEach(x => renderAlertRow(box, x));
+
+  if (severityFilter !== 'all' && severityFilter !== 'events' && !uniqueAlerts.length) {
+    const notice = document.createElement('div');
+    notice.className = 'alertRow';
+    notice.textContent = 'No alerts for this severity.';
+    box.appendChild(notice);
+  }
+
+  if (hasEvents) {
+    const eventsSearched = eventsCache.filter(x => searchFilter(x, [
+      x.event_id, x.source, x.type, x.log, x.time, x.host, x.category, x.record, x.user,
+      Array.isArray(x.inserts) ? x.inserts.join(' ') : ''
+    ]));
+    const uniqueEvents = dedupeByKey(
+      eventsSearched,
+      x => `${x.record || ''}|${x.event_id || ''}|${x.time || ''}|${x.host || ''}`
+    );
+    uniqueEvents.slice(-maxDisplay).reverse().forEach(x => renderEventRow(box, x));
+  }
+}
+
+function getFilteredExportData(){
+  const filtered = [];
+  const searchLower = searchQuery.toLowerCase();
+  const searchFilter = (x, fields) => {
+    if (!searchLower) return true;
+    return fields.some(v => String(v ?? '').toLowerCase().includes(searchLower));
+  };
+
+  if (Array.isArray(alertsCache) && alertsCache.length) {
+    const alertsBySev = severityFilter === 'all'
+      ? alertsCache
+      : alertsCache.filter(x => (x.severity || 'low') === severityFilter);
+    alertsBySev.filter(x => searchFilter(x, [
+      x.rule, x.host, x.user, x.mitre, x.time, x.event_id
+    ])).forEach(x => filtered.push({
+      type: 'alert',
+      rule: x.rule,
+      severity: x.severity,
+      host: x.host,
+      user: x.user,
+      time: x.time,
+      mitre: x.mitre,
+      event_id: x.event_id
+    }));
+  }
+
+  return filtered;
+}
+
+function downloadFile(filename, content, mime){
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportJson(){
+  const data = getFilteredExportData();
+  downloadFile('logs-export.json', JSON.stringify(data, null, 2), 'application/json');
+}
+
+function exportCsv(){
+  const data = getFilteredExportData();
+  if (!data.length) {
+    downloadFile('logs-export.csv', 'type\n', 'text/csv');
+    return;
+  }
+  const headers = Object.keys(data[0]);
+  const csvLines = [headers.join(',')];
+  data.forEach(row => {
+    const line = headers.map(h => {
+      const val = row[h] ?? '';
+      const safe = String(val).replace(/"/g,'""');
+      return `"${safe}"`;
+    }).join(',');
+    csvLines.push(line);
+  });
+  downloadFile('logs-export.csv', csvLines.join('\n'), 'text/csv');
+}
+
+async function refresh(){
+  const box = document.getElementById('alertsBox');
+  const prevScrollTop = box.scrollTop;
+  const prevScrollHeight = box.scrollHeight;
+  const lockScroll = document.getElementById('lockScroll').checked;
+
+  const [a, e] = await Promise.all([
+    fetch(withRange('/alerts')).then(r=>r.json()),
+    Promise.resolve([])
+  ]);
+
+  alertsCache = Array.isArray(a) ? a : [];
+  eventsCache = Array.isArray(e) ? e : [];
+
+  renderCurrentView();
+  if (lockScroll) {
+    box.scrollTop = 0;
+  } else {
+    const heightDelta = box.scrollHeight - prevScrollHeight;
+    box.scrollTop = prevScrollTop + heightDelta;
+  }
+
+  const s = await fetch(withRange('/severity')).then(r=>r.json());
+  document.getElementById('crit').firstChild.nodeValue=s.critical||0;
+  document.getElementById('high').firstChild.nodeValue=s.high||0;
+  document.getElementById('med').firstChild.nodeValue=s.medium||0;
+  document.getElementById('low').firstChild.nodeValue=s.low||0;
+
+  sevChart.data.datasets[0].data=[s.critical||0,s.high||0,s.medium||0,s.low||0];
+  sevChart.update();
+
+  const m = await fetch(withRange('/mitre_stats')).then(r=>r.json());
+  mitreChart.data.labels=Object.keys(m);
+  mitreChart.data.datasets[0].data=Object.values(m);
+  mitreChart.update();
+}
+
+setInterval(refresh,5000);
+refresh();
+
+document.getElementById('exportCsv').addEventListener('click', exportCsv);
+document.getElementById('exportJson').addEventListener('click', exportJson);
+
+</script>
+
+</body>
+</html>
